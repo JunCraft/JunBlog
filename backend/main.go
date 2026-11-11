@@ -38,6 +38,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -84,6 +85,7 @@ type Server struct {
 	accountFile string
 	acctMu      sync.Mutex // guards account file reads/writes
 	mu          sync.Mutex // guards index.json / categories.json / post writes
+	likesMu     sync.Mutex // guards likes.json reads/writes
 }
 
 // adminAccount is the single fixed admin account, stored as JSON in
@@ -159,6 +161,10 @@ func main() {
 	mux.HandleFunc("PUT /api/data/{name}", s.handlePutData)
 	mux.HandleFunc("POST /api/upload", s.handleUpload)
 	mux.HandleFunc("POST /api/files/delete", s.handleDeleteFiles)
+	mux.HandleFunc("GET /api/like", s.handleGetLike)
+	mux.HandleFunc("POST /api/like", s.handlePostLike)
+	mux.HandleFunc("POST /api/change-password", s.handleChangePassword)
+	mux.HandleFunc("POST /api/upload-audio", s.handleUploadAudio)
 
 	log.Printf("blog-api listening on %s, data dir %s, site dir %s", *addr, absData, absSite)
 	log.Fatal(http.ListenAndServe(*addr, mux))
@@ -264,6 +270,212 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "token": acct.Token})
+}
+
+// saveAccount rewrites the account file atomically (0600). Callers load
+// the account first (loadAccount releases its lock on return), then save.
+func (s *Server) saveAccount(acct *adminAccount) error {
+	s.acctMu.Lock()
+	defer s.acctMu.Unlock()
+	b, err := json.MarshalIndent(acct, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(s.accountFile, b, 0o600)
+}
+
+// handleChangePassword changes the admin password. Authenticated (Bearer
+// token) and requires the current password. The new password is stored
+// the same way as the provisioned one: a fresh random salt +
+// SHA-256(salt || password). The login token is unchanged, so the current
+// session stays valid after the change.
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuth(w, r) {
+		return
+	}
+	var body struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := readJSONLimit(r, &body, 1<<20); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求无效")
+		return
+	}
+	if strings.TrimSpace(body.OldPassword) == "" || strings.TrimSpace(body.NewPassword) == "" {
+		writeErr(w, http.StatusBadRequest, "请输入原密码和新密码")
+		return
+	}
+	if len([]rune(body.NewPassword)) < 6 {
+		writeErr(w, http.StatusBadRequest, "新密码至少 6 位")
+		return
+	}
+	if body.NewPassword == body.OldPassword {
+		writeErr(w, http.StatusBadRequest, "新密码不能和原密码相同")
+		return
+	}
+	acct, err := s.loadAccount()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "读取账号失败")
+		return
+	}
+	if acct == nil {
+		writeErr(w, http.StatusForbidden, "管理员账号未配置")
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(hashPassword(acct.Salt, body.OldPassword)), []byte(acct.PasswordHash)) != 1 {
+		writeErr(w, http.StatusUnauthorized, "原密码错误")
+		return
+	}
+	// Fresh random salt (32 bytes, hex), same format as the provisioned one.
+	saltBytes := make([]byte, 32)
+	if _, err := rand.Read(saltBytes); err != nil {
+		writeErr(w, http.StatusInternalServerError, "生成盐值失败")
+		return
+	}
+	acct.Salt = hex.EncodeToString(saltBytes)
+	acct.PasswordHash = hashPassword(acct.Salt, body.NewPassword)
+	if err := s.saveAccount(acct); err != nil {
+		writeErr(w, http.StatusInternalServerError, "保存账号失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// defaultLikeCount is the starting count for a slug that has never been
+// liked. The homepage like button starts at 100 and counts up from there.
+const defaultLikeCount = 100
+
+func (s *Server) likesPath() string {
+	return filepath.Join(s.siteDir, "data", "likes.json")
+}
+
+func (s *Server) readLikes() (map[string]int, error) {
+	b, err := os.ReadFile(s.likesPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]int{}, nil
+		}
+		return nil, err
+	}
+	var m map[string]int
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	if m == nil {
+		m = map[string]int{}
+	}
+	return m, nil
+}
+
+func (s *Server) writeLikes(m map[string]int) error {
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFileAtomic(s.likesPath(), b, 0o644)
+}
+
+// handleGetLike returns the like count for a slug. Unknown slugs start
+// at defaultLikeCount (100); the count is only stored once someone likes.
+func (s *Server) handleGetLike(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if slug == "" {
+		writeErr(w, http.StatusBadRequest, "缺少 slug")
+		return
+	}
+	s.likesMu.Lock()
+	defer s.likesMu.Unlock()
+	m, err := s.readLikes()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "读取点赞数失败")
+		return
+	}
+	count, ok := m[slug]
+	if !ok {
+		count = defaultLikeCount
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
+}
+
+// handlePostLike adds one like for a slug and returns the new count.
+// A slug with no stored count starts from defaultLikeCount, so the
+// first like makes it 101.
+func (s *Server) handlePostLike(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimSpace(r.URL.Query().Get("slug"))
+	if slug == "" {
+		writeErr(w, http.StatusBadRequest, "缺少 slug")
+		return
+	}
+	s.likesMu.Lock()
+	defer s.likesMu.Unlock()
+	m, err := s.readLikes()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "读取点赞数失败")
+		return
+	}
+	count, ok := m[slug]
+	if !ok {
+		count = defaultLikeCount
+	}
+	count++
+	m[slug] = count
+	if err := s.writeLikes(m); err != nil {
+		writeErr(w, http.StatusInternalServerError, "保存点赞数失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": count})
+}
+
+// handleUploadAudio stores one mp3 file under <siteDir>/music/,
+// content-addressed (<sha256>.mp3), deduplicated. Only one song is
+// configured at a time (the custom-song setting holds a single URL);
+// the file itself is just stored here and referenced by that setting.
+func (s *Server) handleUploadAudio(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuth(w, r) {
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求无效")
+		return
+	}
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "缺少文件")
+		return
+	}
+	defer f.Close()
+	ext := strings.ToLower(filepath.Ext(hdr.Filename))
+	if ext != ".mp3" {
+		writeErr(w, http.StatusBadRequest, "只支持 mp3 格式")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 20<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "读取文件失败")
+		return
+	}
+	if len(data) == 0 {
+		writeErr(w, http.StatusBadRequest, "文件为空")
+		return
+	}
+	// Best-effort content check: real mp3 data sniffs as audio/mpeg;
+	// headerless mp3 frames can sniff as application/octet-stream.
+	ct := http.DetectContentType(data)
+	if ct != "audio/mpeg" && ct != "application/octet-stream" {
+		writeErr(w, http.StatusBadRequest, "文件不是 mp3 音频")
+		return
+	}
+	sum := sha256.Sum256(data)
+	name := hex.EncodeToString(sum[:]) + ".mp3"
+	rel := "music/" + name
+	target := filepath.Join(s.siteDir, filepath.FromSlash(rel))
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		if err := writeFileAtomic(target, data, 0o644); err != nil {
+			writeErr(w, http.StatusInternalServerError, "保存文件失败")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": "/" + rel})
 }
 
 // ---- site content lists (about / bloggers / ...) ----
@@ -405,7 +617,7 @@ func (s *Server) handleDeleteFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	deleted := 0
 	for _, p := range body.Paths {
-		if !strings.HasPrefix(p, "/images/") && p != "/favicon.png" {
+		if !strings.HasPrefix(p, "/images/") && !strings.HasPrefix(p, "/music/") && p != "/favicon.png" {
 			continue
 		}
 		if strings.Contains(p, "..") || strings.Contains(p, "\\") {

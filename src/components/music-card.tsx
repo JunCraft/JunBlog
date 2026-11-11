@@ -12,7 +12,8 @@ import { Pause } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 
-const MUSIC_FILES = ['/music/close-to-you.mp3']
+const DEFAULT_TRACK_URL = '/music/close-to-you.mp3'
+const DEFAULT_TRACK_NAME = 'Close To You'
 
 export default function MusicCard() {
 	const pathname = usePathname()
@@ -22,6 +23,17 @@ export default function MusicCard() {
 	const hiCardStyles = cardStyles.hiCard
 	const clockCardStyles = cardStyles.clockCard
 	const calendarCardStyles = cardStyles.calendarCard
+
+	// A custom song (set in 网站设置 → 自定义歌曲) replaces the default
+	// track. Only one song is supported; the list below always has one item.
+	const customSong: any = (siteContent as any).customSong
+	const trackUrl =
+		customSong && typeof customSong.url === 'string' && customSong.url && (customSong.source === 'upload' || customSong.source === 'url')
+			? (customSong.url as string)
+			: DEFAULT_TRACK_URL
+	const trackName =
+		customSong && typeof customSong.name === 'string' && customSong.name ? (customSong.name as string) : DEFAULT_TRACK_NAME
+	const trackList = useMemo(() => [trackUrl], [trackUrl])
 
 	const [isPlaying, setIsPlaying] = useState(false)
 	const [currentIndex, setCurrentIndex] = useState(0)
@@ -64,7 +76,7 @@ export default function MusicCard() {
 		}
 
 		const handleEnded = () => {
-			const nextIndex = (currentIndexRef.current + 1) % MUSIC_FILES.length
+			const nextIndex = (currentIndexRef.current + 1) % trackList.length
 			currentIndexRef.current = nextIndex
 			setCurrentIndex(nextIndex)
 			setProgress(0)
@@ -89,13 +101,13 @@ export default function MusicCard() {
 		}
 	}, [])
 
-	// Handle currentIndex change - load new audio
+	// Handle currentIndex / track change - load new audio
 	useEffect(() => {
 		currentIndexRef.current = currentIndex
 		if (audioRef.current) {
 			const wasPlaying = !audioRef.current.paused
 			audioRef.current.pause()
-			audioRef.current.src = MUSIC_FILES[currentIndex]
+			audioRef.current.src = trackList[currentIndex]
 			audioRef.current.loop = false
 			setProgress(0)
 
@@ -103,7 +115,7 @@ export default function MusicCard() {
 				audioRef.current.play().catch(console.error)
 			}
 		}
-	}, [currentIndex])
+	}, [currentIndex, trackList])
 
 	// Handle play/pause state change
 	useEffect(() => {
@@ -158,7 +170,7 @@ export default function MusicCard() {
 				<MusicSVG className='h-8 w-8' />
 
 				<div className='flex-1'>
-					<div className='text-secondary text-sm'>Close To You</div>
+					<div className='text-secondary text-sm'>{trackName}</div>
 
 					<div className='mt-1 h-2 rounded-full bg-white/60'>
 						<div className='bg-linear h-full rounded-full transition-all duration-300' style={{ width: `${progress}%` }} />

@@ -11,17 +11,7 @@ import { useWriteStore } from '../stores/write-store'
 import { INIT_DELAY } from '@/consts'
 import { ResolvedImage } from '../extensions/resolved-image'
 import { extractFirstH1, normalizeLeadingH1 } from '../lib/md-title'
-import { isImageMarkdownOnly } from '../lib/md-image'
-import type { ImageItem } from '../types'
-
-function imagesToMarkdown(items: ImageItem[]) {
-	return items.map(item => (item.type === 'url' ? `![](${item.url})` : `![](local-image:${item.id})`)).join('\n')
-}
-
-function insertMarkdownAt(editor: Editor, markdown: string, pos?: number) {
-	const target = pos ?? editor.state.selection.from
-	editor.chain().focus().insertContentAt(target, markdown, { contentType: 'markdown' }).run()
-}
+import { handleWriteEditorPaste, imagesToMarkdown, insertImageMarkdownAt } from '../lib/editor-paste'
 
 function setLink(editor: Editor) {
 	const previous = editor.getAttributes('link').href as string | undefined
@@ -95,41 +85,7 @@ export function WriteEditor() {
 				return false
 			},
 			handlePaste: (_view, event) => {
-				const items = event.clipboardData?.items
-				if (items) {
-					const imageFiles: File[] = []
-					for (let i = 0; i < items.length; i++) {
-						const item = items[i]
-						if (item.type.startsWith('image/')) {
-							const file = item.getAsFile()
-							if (file) imageFiles.push(file)
-						}
-					}
-
-					if (imageFiles.length > 0) {
-						event.preventDefault()
-						addFilesRef.current(imageFiles).then(resultImages => {
-							const current = editorRef.current
-							if (!current || resultImages.length === 0) return
-							insertMarkdownAt(current, imagesToMarkdown(resultImages))
-						})
-						return true
-					}
-				}
-
-				// Pasted markdown image syntax (e.g. `![alt](/images/x.png)`)
-				// is otherwise inserted as literal text — parse it into real
-				// image nodes instead. Only pure image pastes are converted;
-				// mixed text keeps its literal wording (known limitation).
-				const text = event.clipboardData?.getData('text/plain') || ''
-				if (isImageMarkdownOnly(text)) {
-					event.preventDefault()
-					const current = editorRef.current
-					if (current) insertMarkdownAt(current, text.trim())
-					return true
-				}
-
-				return false
+				return handleWriteEditorPaste(editorRef.current, addFilesRef.current, event)
 			},
 			handleDrop: (view, event, _slice, moved) => {
 				if (moved) return false
@@ -143,7 +99,7 @@ export function WriteEditor() {
 						addFilesRef.current(imageFiles).then(resultImages => {
 							const current = editorRef.current
 							if (!current || resultImages.length === 0) return
-							insertMarkdownAt(current, imagesToMarkdown(resultImages), coords?.pos)
+							insertImageMarkdownAt(current, imagesToMarkdown(resultImages), coords?.pos)
 						})
 						return true
 					}
@@ -156,7 +112,7 @@ export function WriteEditor() {
 					const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
 					const current = editorRef.current
 					if (current) {
-						insertMarkdownAt(current, trimmed, coords?.pos)
+						insertImageMarkdownAt(current, trimmed, coords?.pos)
 					}
 					return true
 				}

@@ -33,6 +33,16 @@ export async function loginRequest(username: string, password: string): Promise<
 	return data.token as string
 }
 
+/** Change the admin password. Requires login (Bearer token) and the
+ *  current password; the backend verifies the old password first. */
+export async function changePasswordRequest(oldPassword: string, newPassword: string): Promise<void> {
+	await apiFetch('/api/change-password', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ oldPassword, newPassword }),
+	})
+}
+
 async function apiFetch(path: string, init: RequestInit = {}): Promise<any> {
 	const token = getAdminToken()
 	const headers: Record<string, string> = {
@@ -130,6 +140,19 @@ export async function uploadImageRequest(file: File, opts: { dir?: string; path?
 	if (opts.dir) form.append('dir', opts.dir)
 	if (opts.path) form.append('path', opts.path)
 	const data = await apiFetch('/api/upload', { method: 'POST', body: form })
+	if (!data?.path) {
+		throw new Error('上传失败：服务器未返回路径')
+	}
+	return data.path as string
+}
+
+/** Upload one mp3 file to the server (custom song). The file is stored
+ *  content-addressed under /music/<sha256>.mp3. Returns the public path
+ *  to store in the site-content custom-song setting. */
+export async function uploadAudioRequest(file: File): Promise<string> {
+	const form = new FormData()
+	form.append('file', file)
+	const data = await apiFetch('/api/upload-audio', { method: 'POST', body: form })
 	if (!data?.path) {
 		throw new Error('上传失败：服务器未返回路径')
 	}

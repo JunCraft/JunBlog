@@ -11,13 +11,14 @@ import type { SiteContent, CardStyles } from '../stores/config-store'
 import { SiteSettings, type FileItem, type ArtImageUploads, type BackgroundImageUploads, type SocialButtonImageUploads } from './site-settings'
 import { ColorConfig } from './color-config'
 import { HomeLayout } from './home-layout'
+import { AdminSection } from './admin-section'
 
 interface ConfigDialogProps {
 	open: boolean
 	onClose: () => void
 }
 
-type TabType = 'site' | 'color' | 'layout'
+type TabType = 'site' | 'color' | 'layout' | 'admin'
 
 export default function ConfigDialog({ open, onClose }: ConfigDialogProps) {
 	const { isAuth, loginModalOpen, setLoginModalOpen } = useAuthStore()
@@ -170,14 +171,6 @@ export default function ConfigDialog({ open, onClose }: ConfigDialogProps) {
 		setSiteContent(originalData)
 		setCardStyles(originalCardStyles)
 		regenerateBubbles()
-		// Restore document title and meta if they were changed by preview
-		if (typeof document !== 'undefined') {
-			document.title = originalData.meta.title
-			const metaDescription = document.querySelector('meta[name="description"]')
-			if (metaDescription) {
-				metaDescription.setAttribute('content', originalData.meta.description)
-			}
-		}
 		updateThemeVariables(originalData.theme)
 		setFaviconItem(null)
 		setAvatarItem(null)
@@ -204,31 +197,13 @@ export default function ConfigDialog({ open, onClose }: ConfigDialogProps) {
 		if (colorArticle) root.style.setProperty('--color-article', colorArticle)
 	}
 
-	const handlePreview = () => {
-		console.log('formData', formData)
-		setSiteContent(formData)
-		setCardStyles(cardStylesData)
-		regenerateBubbles()
-
-		// Update document title
-		if (typeof document !== 'undefined') {
-			document.title = formData.meta.title
-			const metaDescription = document.querySelector('meta[name="description"]')
-			if (metaDescription) {
-				metaDescription.setAttribute('content', formData.meta.description)
-			}
-		}
-		updateThemeVariables(formData.theme)
-
-		onClose()
-	}
-
 	const buttonText = isAuth ? '保存' : '登录'
 
 	const tabs: { id: TabType; label: string }[] = [
 		{ id: 'site', label: '网站设置' },
 		{ id: 'color', label: '色彩配置' },
-		{ id: 'layout', label: '首页布局' }
+		{ id: 'layout', label: '首页布局' },
+		{ id: 'admin', label: '管理员' }
 	]
 
 	return (
@@ -249,13 +224,6 @@ export default function ConfigDialog({ open, onClose }: ConfigDialogProps) {
 						))}
 					</div>
 					<div className='flex gap-3'>
-						<motion.button
-							whileHover={{ scale: 1.05 }}
-							whileTap={{ scale: 0.95 }}
-							onClick={handlePreview}
-							className='bg-card rounded-xl border px-6 py-2 text-sm'>
-							预览
-						</motion.button>
 						<motion.button
 							whileHover={{ scale: 1.05 }}
 							whileTap={{ scale: 0.95 }}
@@ -289,6 +257,7 @@ export default function ConfigDialog({ open, onClose }: ConfigDialogProps) {
 					)}
 					{activeTab === 'color' && <ColorConfig formData={formData} setFormData={setFormData} />}
 					{activeTab === 'layout' && <HomeLayout cardStylesData={cardStylesData} setCardStylesData={setCardStylesData} onClose={onClose} />}
+					{activeTab === 'admin' && <AdminSection formData={formData} setFormData={setFormData} />}
 				</div>
 			</DialogModal>
 		</>

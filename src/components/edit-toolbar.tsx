@@ -36,7 +36,12 @@ export function EditToolbar({
 		<motion.div
 			initial={{ opacity: 0, scale: 0.6 }}
 			animate={{ opacity: 1, scale: 1 }}
-			className={cn('absolute top-4 right-6 flex gap-3 max-sm:hidden', className)}>
+			// Fixed (not absolute): on long list pages (/bloggers) an
+			// absolute toolbar scrolls away with the page, so after scrolling
+			// down to a card the user could not find the page-level 保存
+			// button and the inline edit looked saved while nothing was
+			// persisted. Fixed keeps 保存 visible at the viewport corner.
+			className={cn('fixed top-4 right-6 z-50 flex gap-3 max-sm:hidden', className)}>
 			{isEditMode ? (
 				<>
 					{leadingEditActions}

@@ -11,3 +11,18 @@ const IMAGE_MARKDOWN_ONLY = /^\s*(?:!\[[^\]]*\]\([^)\s]+\)\s*)+$/
 export function isImageMarkdownOnly(text: string): boolean {
 	return IMAGE_MARKDOWN_ONLY.test(text)
 }
+
+export type ParsedImageMarkdown = { alt: string; src: string; title?: string }
+
+/** Extract every `![alt](src ["title"])` occurrence from the text. */
+const IMAGE_MARKDOWN_RE = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+["']([^"')]+)["'])?\)/g
+
+export function parseImageMarkdown(text: string): ParsedImageMarkdown[] {
+	const out: ParsedImageMarkdown[] = []
+	IMAGE_MARKDOWN_RE.lastIndex = 0
+	let m: RegExpExecArray | null
+	while ((m = IMAGE_MARKDOWN_RE.exec(text)) !== null) {
+		out.push({ alt: m[1] ?? '', src: m[2], title: m[3] || undefined })
+	}
+	return out
+}

@@ -13,7 +13,10 @@ type LikeButtonProps = {
 	delay?: number
 }
 
-const ENDPOINT = 'https://blog-liker.yysuni1001.workers.dev/api/like'
+// Like counts live on our own server (Go backend, /api/like) so the
+// homepage count starts at 100 and counts up from there. Previously this
+// pointed at the original author's Cloudflare Worker.
+const ENDPOINT = '/api/like'
 
 export default function LikeButton({ slug = 'yysuni', delay, className }: LikeButtonProps) {
 	slug = BLOG_SLUG_KEY + slug
