@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { useCenterStore } from '@/hooks/use-center'
 import Card from '@/components/card'
 import { useConfigStore } from './stores/config-store'
 import { HomeDraggableLayer } from './home-draggable-layer'
-import Link from 'next/link'
+import { DialogModal } from '@/components/dialog-modal'
 
 function getGreeting() {
 	const hour = new Date().getHours()
@@ -24,6 +25,10 @@ export default function HiCard() {
 	const greeting = getGreeting()
 	const styles = cardStyles.hiCard
 	const username = siteContent.meta.username || 'Suni'
+	// Avatar: a URL set in 网站设置 (siteContent.avatarUrl) wins, otherwise
+	// the uploaded file at /images/avatar.png.
+	const avatarSrc = siteContent.avatarUrl || '/images/avatar.png'
+	const [lightboxOpen, setLightboxOpen] = useState(false)
 
 	const x = styles.offsetX !== null ? center.x + styles.offsetX : center.x - styles.width / 2
 	const y = styles.offsetY !== null ? center.y + styles.offsetY : center.y - styles.height / 2
@@ -47,13 +52,22 @@ export default function HiCard() {
 						/>
 					</>
 				)}
-				<Link href='/live2d'>
-					<img src='/images/avatar.png' className='mx-auto rounded-full' style={{ width: 120, height: 120, boxShadow: ' 0 16px 32px -5px #E2D9CE' }} />
-				</Link>
+				<img
+					src={avatarSrc}
+					alt='avatar'
+					onClick={() => setLightboxOpen(true)}
+					className='mx-auto cursor-pointer rounded-full'
+					style={{ width: 120, height: 120, boxShadow: ' 0 16px 32px -5px #E2D9CE' }}
+				/>
 				<h1 className='font-averia mt-3 text-2xl'>
 					{greeting} <br /> I'm <span className='text-linear text-[32px]'>{username}</span> , Nice to <br /> meet you!
 				</h1>
 			</Card>
+
+			{/* Clicking the avatar opens a zoomed view (no page navigation). */}
+			<DialogModal open={lightboxOpen} onClose={() => setLightboxOpen(false)} className='bg-transparent shadow-none'>
+				<img src={avatarSrc} alt='avatar' className='h-[320px] w-[320px] max-w-[80vw] rounded-full object-cover' style={{ boxShadow: ' 0 16px 32px -5px #E2D9CE' }} />
+			</DialogModal>
 		</HomeDraggableLayer>
 	)
 }

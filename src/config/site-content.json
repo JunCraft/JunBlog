@@ -4,6 +4,8 @@
     "description": "殷俊的个人博客，记录鸿蒙开发、探索、笔记。",
     "username": "JunCraft"
   },
+  "faviconUrl": "",
+  "avatarUrl": "",
   "theme": {
     "colorBrand": "#2fcbe7",
     "colorPrimary": "#5B423F",

@@ -27,7 +27,10 @@ export function BackgroundImagesSection({ formData, setFormData, backgroundImage
 		}
 
 		const hash = await hashFileSHA256(file)
-		const ext = file.name.split('.').pop() || 'png'
+		// Lowercase the extension: the backend lowercases the uploaded
+		// file's extension before checking it against this target path,
+		// so a photo named IMG.JPG would otherwise be rejected.
+		const ext = (file.name.split('.').pop() || 'png').toLowerCase()
 		const id = hash
 		const targetPath = `/images/background/${id}.${ext}`
 		const previewUrl = URL.createObjectURL(file)

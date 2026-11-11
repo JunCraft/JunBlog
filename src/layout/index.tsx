@@ -26,6 +26,15 @@ export default function Layout({ children }: PropsWithChildren) {
 		void loadRuntimeConfig()
 	}, [])
 
+	// Favicon: the built <link rel='icon' href='/favicon.png'> is static.
+	// A URL set in 网站设置 (siteContent.faviconUrl) overrides it at runtime.
+	const faviconUrl = siteContent.faviconUrl
+	useEffect(() => {
+		const link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
+		if (!link) return
+		link.href = faviconUrl && faviconUrl.trim() ? faviconUrl.trim() : '/favicon.png'
+	}, [faviconUrl])
+
 	const backgroundImages = (siteContent.backgroundImages ?? []) as Array<{ id: string; url: string }>
 	const currentBackgroundImageId = siteContent.currentBackgroundImageId
 	const currentBackgroundImage =

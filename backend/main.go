@@ -557,6 +557,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	name := hex.EncodeToString(sum[:]) + ext
 
 	var rel string
+	isExact := false
 	if dir := strings.TrimSpace(r.FormValue("dir")); dir != "" {
 		dir = strings.Trim(dir, "/")
 		if !uploadDirs[dir] {
@@ -570,12 +571,23 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rel = strings.TrimPrefix(p, "/")
+		isExact = true
 	} else {
 		writeErr(w, http.StatusBadRequest, "缺少 dir 或 path")
 		return
 	}
 	target := filepath.Join(s.siteDir, filepath.FromSlash(rel))
-	if _, err := os.Stat(target); os.IsNotExist(err) {
+	// Exact-path uploads (favicon / avatar) must overwrite the existing
+	// file: the target already exists by design, so "skip if exists"
+	// would silently keep the old image and the upload would look like
+	// it failed. Hash-named dir uploads still skip when present (same
+	// content, deduplication).
+	if isExact {
+		if err := writeFileAtomic(target, data, 0o644); err != nil {
+			writeErr(w, http.StatusInternalServerError, "保存文件失败")
+			return
+		}
+	} else if _, err := os.Stat(target); os.IsNotExist(err) {
 		if err := writeFileAtomic(target, data, 0o644); err != nil {
 			writeErr(w, http.StatusInternalServerError, "保存文件失败")
 			return
@@ -584,13 +596,15 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": "/" + rel})
 }
 
-// validExactUploadPath allows only /favicon.png or a file under /images/
-// with a whitelisted image extension, no traversal.
+// validExactUploadPath allows only the two fixed paths (/favicon.png,
+// /images/avatar.png — any whitelisted image extension; the bytes are
+// stored at the fixed .png path and browsers content-sniff) or a file
+// under /images/ whose extension matches the uploaded file's, no traversal.
 func validExactUploadPath(p, ext string) bool {
 	if !imageExts[ext] {
 		return false
 	}
-	if p == "/favicon.png" {
+	if exactUploadPaths[p] {
 		return true
 	}
 	if !strings.HasPrefix(p, "/images/") {
@@ -599,7 +613,9 @@ func validExactUploadPath(p, ext string) bool {
 	if strings.Contains(p, "..") || strings.Contains(p, "\\") {
 		return false
 	}
-	return filepath.Ext(p) == ext
+	// Case-insensitive: a photo named IMG.JPG must not be rejected just
+	// because the target path kept the original uppercase extension.
+	return strings.ToLower(filepath.Ext(p)) == ext
 }
 
 // handleDeleteFiles removes files under the web root (images only), used
