@@ -1,6 +1,6 @@
 # JunBlog
 
-![JunBlog 首页](cover.png)
+![JunBlog 首页](封面.png)
 
 JunCraft 的个人博客。记录鸿蒙开发、探索和笔记。
 
