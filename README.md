@@ -8,7 +8,7 @@ JunCraft 的个人博客。记录鸿蒙开发、探索和笔记。
 
 ## 在线地址
 
-- 博客：http://junblog.cloud-ip.cc/（经 frpc 内网穿透对外访问）
+- 博客：http://junblog.cloud-ip.cc/ （经 frpc 内网穿透对外访问）
 
 ## 它能做什么
 
