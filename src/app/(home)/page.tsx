@@ -21,7 +21,7 @@ import { useEffect } from 'react'
 import SnowfallBackground from '@/layout/backgrounds/snowfall'
 
 export default function Home() {
-	const { maxSM } = useSize()
+	const { maxSM, init } = useSize()
 	const { cardStyles, configDialogOpen, setConfigDialogOpen, siteContent } = useConfigStore()
 	const editing = useLayoutEditStore(state => state.editing)
 	const saveEditing = useLayoutEditStore(state => state.saveEditing)
@@ -53,7 +53,11 @@ export default function Home() {
 
 	return (
 		<>
-			{siteContent.enableChristmas && <SnowfallBackground zIndex={0} count={!maxSM ? 125 : 20} />}
+			{/* Wait for the viewport size before rendering. Before init, maxSM is
+			    false, so desktop-only cards (clock/calendar/share/write) would
+			    flash once on a narrow screen, and the snowfall would mount with
+			    the desktop count (125) then regenerate at the mobile count (20). */}
+			{siteContent.enableChristmas && init && <SnowfallBackground zIndex={0} count={!maxSM ? 125 : 20} />}
 
 			{editing && (
 				<div className='pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center pt-6'>
@@ -76,21 +80,26 @@ export default function Home() {
 				</div>
 			)}
 
-			<div className='max-sm:flex max-sm:flex-col max-sm:items-center max-sm:gap-6 max-sm:pt-28 max-sm:pb-20'>
-				{cardStyles.artCard?.enabled !== false && <ArtCard />}
-				{cardStyles.hiCard?.enabled !== false && <HiCard />}
-				{!maxSM && cardStyles.clockCard?.enabled !== false && <ClockCard />}
-				{!maxSM && cardStyles.calendarCard?.enabled !== false && <CalendarCard />}
-				{cardStyles.socialButtons?.enabled !== false && <SocialButtons />}
-				{!maxSM && cardStyles.shareCard?.enabled !== false && <ShareCard />}
-				{cardStyles.articleCard?.enabled !== false && <AritcleCard />}
-				{!maxSM && cardStyles.writeButtons?.enabled !== false && <WriteButtons />}
-				{cardStyles.likePosition?.enabled !== false && <LikePosition />}
-				{cardStyles.hatCard?.enabled !== false && <HatCard />}
-				{cardStyles.beianCard?.enabled !== false && <BeianCard />}
-			</div>
+			{/* Mobile: the cards are in-flow (max-sm:static) in this column, so the
+			    top padding only needs to clear the fixed hamburger button, and
+			    the bottom padding clears the fixed music bar. */}
+			{init && (
+				<div className='max-sm:flex max-sm:flex-col max-sm:items-center max-sm:gap-6 max-sm:pt-20 max-sm:pb-24'>
+					{cardStyles.artCard?.enabled !== false && <ArtCard />}
+					{cardStyles.hiCard?.enabled !== false && <HiCard />}
+					{!maxSM && cardStyles.clockCard?.enabled !== false && <ClockCard />}
+					{!maxSM && cardStyles.calendarCard?.enabled !== false && <CalendarCard />}
+					{cardStyles.socialButtons?.enabled !== false && <SocialButtons />}
+					{!maxSM && cardStyles.shareCard?.enabled !== false && <ShareCard />}
+					{cardStyles.articleCard?.enabled !== false && <AritcleCard />}
+					{!maxSM && cardStyles.writeButtons?.enabled !== false && <WriteButtons />}
+					{cardStyles.likePosition?.enabled !== false && <LikePosition />}
+					{cardStyles.hatCard?.enabled !== false && <HatCard />}
+					{cardStyles.beianCard?.enabled !== false && <BeianCard />}
+				</div>
+			)}
 
-			{siteContent.enableChristmas && <SnowfallBackground zIndex={2} count={!maxSM ? 125 : 20} />}
+			{siteContent.enableChristmas && init && <SnowfallBackground zIndex={2} count={!maxSM ? 125 : 20} />}
 			<ConfigDialog open={configDialogOpen} onClose={() => setConfigDialogOpen(false)} />
 		</>
 	)

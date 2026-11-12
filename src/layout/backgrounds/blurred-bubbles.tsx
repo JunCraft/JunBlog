@@ -28,6 +28,24 @@ export default function BlurredBubblesBackground({
 	const noise = useRef(makeNoise2D())
 	const animRef = useRef(0)
 
+	// The palette can change at runtime (the server config loads after first
+	// paint, swapping the bundled colours for the saved ones). Bubble colours
+	// are updated in place through these refs, so a palette change never tears
+	// the canvas down and re-seeds the bubbles — that teardown + reseed was
+	// the background flash/flicker on mobile.
+	type Bubble = { x: number; y: number; r: number; color: string; vx: number; vy: number; jitter: number; blur: number }
+	const colorsRef = useRef(colors)
+	const bubblesRef = useRef<Bubble[]>([])
+	useEffect(() => {
+		colorsRef.current = colors
+		const bs = bubblesRef.current
+		if (bs.length > 0) {
+			for (let i = 0; i < bs.length; i++) {
+				bs[i].color = colors[i % colors.length]
+			}
+		}
+	}, [colors])
+
 	useEffect(() => {
 		const canvas = ref.current
 		if (!canvas) return
@@ -49,6 +67,12 @@ export default function BlurredBubblesBackground({
 			const nextWidth = canvas.clientWidth
 			const nextHeight = canvas.clientHeight
 			if (nextWidth === width && nextHeight === height) return
+			// Ignore small height-only changes: on mobile the browser URL bar
+			// showing/hiding while scrolling changes the viewport height by a
+			// few dozen px. Resizing the canvas clears it and redraws, which
+			// reads as a background flicker; the bubbles are heavily blurred
+			// anyway, so a <120px height change is not worth a redraw.
+			if (nextWidth === width && Math.abs(nextHeight - height) < 120) return
 			width = nextWidth
 			height = nextHeight
 			canvas.width = Math.floor(width * DPR)
@@ -116,7 +140,7 @@ export default function BlurredBubblesBackground({
 		allocateGrid()
 
 		// Poisson-ish initial placement to avoid clusters
-		const bubbles: { x: number; y: number; r: number; color: string; vx: number; vy: number; jitter: number; blur: number }[] = []
+		const bubbles: Bubble[] = []
 		const minDist = Math.max(minRadius * 0.2, 80)
 		const maxTries = 5000
 		let tries = 0
@@ -139,7 +163,7 @@ export default function BlurredBubblesBackground({
 					x,
 					y,
 					r,
-					color: colors[bubbles.length % colors.length | 0],
+					color: colorsRef.current[bubbles.length % colorsRef.current.length | 0],
 					vx: rand(-0.2, 0.2),
 					vy: rand(-0.2, 0.2),
 					jitter: rand(0.6, 1.2),
@@ -147,6 +171,7 @@ export default function BlurredBubblesBackground({
 				})
 			}
 		}
+		bubblesRef.current = bubbles
 		// console.log('[bg] tries:', tries)
 		// console.log('[bg] bubbles count:', bubbles.length)
 
@@ -305,8 +330,11 @@ export default function BlurredBubblesBackground({
 			cancelAnimationFrame(animRef.current)
 			ro.disconnect()
 			if (resizeTimer !== null) window.clearTimeout(resizeTimer)
+			bubblesRef.current = []
 		}
-	}, [colors, regenerateKey])
+		// NOTE: intentionally NOT depending on `colors` — a palette change is
+		// applied in place by the effect above (no teardown, no reseed).
+	}, [regenerateKey])
 
 	return (
 		<motion.div

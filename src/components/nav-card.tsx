@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { useSize } from '@/hooks/use-size'
 import { useConfigStore } from '@/app/(home)/stores/config-store'
 import { HomeDraggableLayer } from '@/app/(home)/home-draggable-layer'
+import { Menu, X } from 'lucide-react'
 
 const list = [
 	{
@@ -62,11 +63,17 @@ export default function NavCard() {
 	const pathname = usePathname()
 	const center = useCenterStore()
 	const [show, setShow] = useState(false)
-	const { maxSM } = useSize()
+	const { maxSM, init } = useSize()
 	const [hoveredIndex, setHoveredIndex] = useState<number>(0)
+	const [drawerOpen, setDrawerOpen] = useState(false)
 	const { siteContent, cardStyles } = useConfigStore()
 	const styles = cardStyles.navCard
 	const hiCardStyles = cardStyles.hiCard
+
+	// Mobile homepage: the top icon pill is hidden by design (v6). Navigation
+	// is a fixed hamburger button that opens a proper slide-in drawer, so the
+	// nav never scrolls away and never flashes the desktop sidebar.
+	const isMobileHome = maxSM && pathname === '/'
 
 	const activeIndex = useMemo(() => {
 		const index = list.findIndex(item => pathname === item.href)
@@ -115,6 +122,66 @@ export default function NavCard() {
 	}, [hoveredIndex, activeIndex, form])
 
 	if (maxSM) position = { x: center.x - size.width / 2, y: 16 }
+
+	// Don't render anything until the viewport size is known. Before init,
+	// maxSM is false, so the desktop 'full' sidebar would flash once on a
+	// narrow screen at desktop coordinates (cut off, floating over content).
+	if (!init) return null
+
+	// --- Mobile homepage: hamburger + slide-in drawer (no top icon pill) ---
+	if (isMobileHome)
+		return (
+			<>
+				<button
+					type='button'
+					aria-label='打开导航'
+					onClick={() => setDrawerOpen(true)}
+					className='bg-card text-secondary fixed top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border shadow-md backdrop-blur'>
+					<Menu className='h-5 w-5' />
+				</button>
+
+				{drawerOpen && (
+					<>
+						<div className='fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]' onClick={() => setDrawerOpen(false)} />
+						<motion.div
+							initial={{ x: -320, opacity: 0.6 }}
+							animate={{ x: 0, opacity: 1 }}
+							transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+							className='bg-card fixed top-0 bottom-0 left-0 z-50 flex w-[300px] max-w-[85vw] flex-col overflow-y-auto border-r p-6 shadow-xl backdrop-blur'>
+							<div className='mb-2 flex items-center justify-between'>
+								<Link className='flex items-center gap-3' href='/' onClick={() => setDrawerOpen(false)}>
+									<Image src={siteContent.avatarUrl || '/images/avatar.png'} alt='avatar' width={40} height={40} style={{ boxShadow: ' 0 12px 20px -5px #E2D9CE' }} className='rounded-full' />
+									<span className='font-averia text-2xl leading-none font-medium'>{siteContent.meta.title}</span>
+									<span className='text-brand text-xs font-medium'>(开发中)</span>
+								</Link>
+								<button type='button' aria-label='关闭导航' onClick={() => setDrawerOpen(false)} className='text-secondary flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-white/60'>
+									<X className='h-5 w-5' />
+								</button>
+							</div>
+
+							<div className='text-secondary mt-6 text-sm uppercase'>General</div>
+							<div className='mt-2 space-y-2'>
+								{list.map(item => {
+									const active = pathname === item.href
+									return (
+										<Link
+											key={item.href}
+											href={item.href}
+											onClick={() => setDrawerOpen(false)}
+											className={cn('text-secondary relative flex items-center gap-3 rounded-full px-5 py-3 text-base', active && 'text-primary font-medium')}>
+											<div className='flex h-7 w-7 items-center justify-center'>
+												{active ? <item.iconActive className='text-brand absolute h-7 w-7' /> : <item.icon className='absolute h-7 w-7' />}
+											</div>
+											<span>{item.label}</span>
+										</Link>
+									)
+								})}
+							</div>
+						</motion.div>
+					</>
+				)}
+			</>
+		)
 
 	if (show)
 		return (

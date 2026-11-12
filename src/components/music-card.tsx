@@ -12,6 +12,7 @@ import { Pause } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { setMusicTrack, toggleMusic, useMusicPlayer } from '@/lib/music-player'
+import { useSize } from '@/hooks/use-size'
 
 const DEFAULT_TRACK_URL = '/music/close-to-you.mp3'
 const DEFAULT_TRACK_NAME = 'Close To You'
@@ -41,6 +42,7 @@ export default function MusicCard() {
 	// music never stops or restarts when entering /pictures (or any
 	// other page). This card is only a view onto that player.
 	const { isPlaying, progress } = useMusicPlayer()
+	const { maxSM } = useSize()
 
 	// Keep the singleton on the right track. setMusicTrack is a no-op
 	// when the URL is unchanged, so a remount never restarts the song.
@@ -73,6 +75,37 @@ export default function MusicCard() {
 		return null
 	}
 
+	// Inner content shared by the desktop card and the mobile bottom bar.
+	const inner = (
+		<>
+			<MusicSVG className='h-8 w-8 shrink-0' />
+
+			<div className='min-w-0 flex-1'>
+				<div className='text-secondary truncate text-sm'>{trackName}</div>
+
+				<div className='mt-1 h-2 rounded-full bg-white/60'>
+					<div className='bg-linear h-full rounded-full transition-all duration-300' style={{ width: `${progress}%` }} />
+				</div>
+			</div>
+
+			<button onClick={toggleMusic} className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white transition-opacity hover:opacity-80'>
+				{isPlaying ? <Pause className='text-brand h-4 w-4' /> : <PlaySVG className='text-brand ml-1 h-4 w-4' />}
+			</button>
+		</>
+	)
+
+	// Mobile homepage: the desktop-coordinate position (center.x + hiCard
+	// width/2 - offset) lands past the right edge on a narrow screen, so the
+	// card was only a clipped sliver at bottom-right. Use a fixed bottom bar
+	// centred in the viewport instead — never clipped, independent of the
+	// desktop grid.
+	if (maxSM && isHomePage)
+		return (
+			<div className='bg-card fixed bottom-4 left-1/2 z-40 flex w-[min(293px,calc(100vw-32px))] -translate-x-1/2 items-center gap-3 rounded-[40px] border p-4 shadow-lg backdrop-blur'>
+				{inner}
+			</div>
+		)
+
 	return (
 		<HomeDraggableLayer cardKey='musicCard' x={x} y={y} width={styles.width} height={styles.height}>
 			<Card order={styles.order} width={styles.width} height={styles.height} x={x} y={y} className={clsx('flex items-center gap-3', !isHomePage && 'fixed')}>
@@ -93,19 +126,7 @@ export default function MusicCard() {
 					</>
 				)}
 
-				<MusicSVG className='h-8 w-8' />
-
-				<div className='flex-1'>
-					<div className='text-secondary text-sm'>{trackName}</div>
-
-					<div className='mt-1 h-2 rounded-full bg-white/60'>
-						<div className='bg-linear h-full rounded-full transition-all duration-300' style={{ width: `${progress}%` }} />
-					</div>
-				</div>
-
-				<button onClick={toggleMusic} className='flex h-10 w-10 items-center justify-center rounded-full bg-white transition-opacity hover:opacity-80'>
-					{isPlaying ? <Pause className='text-brand h-4 w-4' /> : <PlaySVG className='text-brand ml-1 h-4 w-4' />}
-				</button>
+				{inner}
 			</Card>
 		</HomeDraggableLayer>
 	)

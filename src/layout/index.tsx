@@ -11,10 +11,12 @@ import { ScrollTopButton } from '@/components/scroll-top-button'
 import MusicCard from '@/components/music-card'
 import { AdminLoginModal } from '@/components/admin-login-modal'
 import { useAuthStore } from '@/hooks/use-auth'
+import { usePathname } from 'next/navigation'
 
 export default function Layout({ children }: PropsWithChildren) {
 	useCenterInit()
 	useSizeInit()
+	const pathname = usePathname()
 	const { cardStyles, siteContent, regenerateKey } = useConfigStore()
 	const { maxSM, init } = useSize()
 	const loginModalOpen = useAuthStore(s => s.loginModalOpen)
@@ -71,14 +73,20 @@ export default function Layout({ children }: PropsWithChildren) {
 			)}
 			<BlurredBubblesBackground colors={siteContent.backgroundColors} regenerateKey={regenerateKey} />
 
-			<main className='relative z-10 h-full'>
+			{/* min-h-full (not h-full): on the mobile homepage the cards are in-flow
+			    and taller than one viewport, so main must be allowed to grow. */}
+			<main className='relative z-10 min-h-full'>
 				{children}
 				<NavCard />
 
 				{cardStyles.musicCard?.enabled !== false && <MusicCard />}
 			</main>
 
-			{maxSM && init && <ScrollTopButton className='bg-brand/20 fixed right-6 bottom-8 z-50 shadow-md' />}
+			{/* On the mobile homepage the music bar is fixed at the bottom, so the
+			    scroll-top button sits above it instead of overlapping its play button. */}
+			{maxSM && init && (
+				<ScrollTopButton className={pathname === '/' ? 'bg-brand/20 fixed right-6 bottom-24 z-50 shadow-md' : 'bg-brand/20 fixed right-6 bottom-8 z-50 shadow-md'} />
+			)}
 
 			{/* Global admin login modal, opened by the edit pages and the
 			    site-settings dialog when the user clicks 登录 while logged out. */}
